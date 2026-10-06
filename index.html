@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Шашки</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:Arial,sans-serif;background:linear-gradient(135deg,#151515,#303030);color:white;display:flex;justify-content:center;align-items:center;padding:20px}
+.game{width:min(94vw,620px);text-align:center}
+h1{margin:0 0 8px;font-size:38px}
+#status{margin-bottom:14px;font-size:18px;color:#ddd}
+.board{width:min(92vw,560px);aspect-ratio:1;margin:auto;display:grid;grid-template-columns:repeat(8,1fr);border:6px solid #111;border-radius:10px;overflow:hidden;box-shadow:0 12px 35px #0008}
+.cell{position:relative;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.light{background:#f0d9b5}.dark{background:#8b5a35}
+.cell.selected{outline:4px solid #ffe600;outline-offset:-4px}
+.cell.move::after{content:"";width:25%;height:25%;border-radius:50%;background:#43d66b;position:absolute}
+.piece{width:72%;height:72%;border-radius:50%;border:3px solid #222;box-shadow:inset 0 5px 5px #fff4,0 3px 5px #0008;position:relative;z-index:2}
+.red{background:#d93636}.black{background:#222}
+.king::before{content:"♛";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#ffd84a;font-size:clamp(20px,5vw,34px);font-weight:bold}
+button{margin-top:18px;padding:12px 25px;border:0;border-radius:9px;background:#e9b949;color:#171717;font-size:17px;font-weight:bold;cursor:pointer}
+button:hover{background:#ffd266}
+.info{margin-top:12px;color:#aaa;font-size:14px}
+</style>
+</head>
+<body>
+<div class="game">
+<h1>♟ Шашки</h1>
+<div id="status">Ход красных</div>
+<div id="board" class="board"></div>
+<button onclick="newGame()">Новая игра</button>
+<div class="info">Выбирай шашку и нажимай на клетку, куда хочешь пойти. Взятие обязательно.</div>
+</div>
+<script>
+let board, turn, selected, moves, gameOver;
+
+function newGame(){
+  board=Array.from({length:8},()=>Array(8).fill(null));
+  for(let r=0;r<3;r++)for(let c=0;c<8;c++)if((r+c)%2)board[r][c]='black';
+  for(let r=5;r<8;r++)for(let c=0;c<8;c++)if((r+c)%2)board[r][c]='red';
+  turn='red'; selected=null; moves=[]; gameOver=false; render();
+}
+function render(){
+  const el=document.getElementById('board'); el.innerHTML='';
+  const all=getAllMoves(turn);
+  document.getElementById('status').textContent=gameOver?'Игра окончена':`Ход ${turn==='red'?'красных':'чёрных'}${all.some(x=>x.capture)?' — обязательно взятие':''}`;
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+    const cell=document.createElement('div'); cell.className='cell '+((r+c)%2?'dark':'light');
+    if(selected&&selected.r===r&&selected.c===c)cell.classList.add('selected');
+    if(moves.some(m=>m.r===r&&m.c===c))cell.classList.add('move');
+    cell.onclick=()=>clickCell(r,c);
+    if(board[r][c]){
+      const p=document.createElement('div'); p.className='piece '+norm(board[r][c]).color;
+      if(norm(board[r][c]).king)p.classList.add('king');
+      cell.appendChild(p);
+    }
+    el.appendChild(cell);
+  }
+}
+function norm(p){return typeof p==='string'?{color:p,king:false}:p}
+function dirs(piece){
+  return piece.king?[[1,1],[1,-1],[-1,1],[-1,-1]]:(piece.color==='red'?[[-1,1],[-1,-1]]:[[1,1],[1,-1]]);
+}
+function getMoves(r,c,captureOnly=false){
+  const p=norm(board[r][c]); if(!p||p.color!==turn)return [];
+  let out=[];
+  for(const [dr,dc] of dirs(p)){
+    let nr=r+dr,nc=c+dc;
+    if(nr>=0&&nr<8&&nc>=0&&nc<8&&!board[nr][nc]&&!captureOnly) out.push({r:nr,c:nc});
+    if(nr>=0&&nr<8&&nc>=0&&nc<8&&board[nr][nc]&&norm(board[nr][nc]).color!==p.color){
+      let jr=nr+dr,jc=nc+dc;
+      if(jr>=0&&jr<8&&jc>=0&&jc<8&&!board[jr][jc])out.push({r:jr,c:jc,capture:{r:nr,c:nc}});
+    }
+  }
+  return out;
+}
+function getAllMoves(color){
+  const old=turn; turn=color; let all=[];
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(board[r][c]&&norm(board[r][c]).color===color)
+    getMoves(r,c,true).forEach(m=>all.push({...m,from:{r,c},capture:true}));
+  if(all.length){turn=old;return all}
+  for(let r=0;r<8;r++)for(let c=0;c<8;c++)if(board[r][c]&&norm(board[r][c]).color===color)
+    getMoves(r,c,false).forEach(m=>all.push({...m,from:{r,c},capture:false}));
+  turn=old; return all;
+}
+function clickCell(r,c){
+  if(gameOver)return;
+  const p=board[r][c]?norm(board[r][c]):null;
+  if(selected){
+    const m=moves.find(x=>x.r===r&&x.c===c);
+    if(m){ movePiece(selected.r,selected.c,r,c,m.capture); return; }
+  }
+  if(p&&p.color===turn){
+    const forced=getAllMoves(turn).some(x=>x.capture);
+    selected={r,c}; moves=getMoves(r,c,forced); render();
+  }else{selected=null;moves=[];render();}
+}
+function movePiece(sr,sc,tr,tc,capture){
+  let p=norm(board[sr][sc]); board[sr][sc]=null; board[tr][tc]=p;
+  if(capture)board[capture.r][capture.c]=null;
+  if((p.color==='red'&&tr===0)||(p.color==='black'&&tr===7))p.king=true;
+  selected=null;moves=[];
+  if(capture){
+    const more=getMoves(tr,tc,true);
+    if(more.length){selected={r:tr,c:tc};moves=more;render();return;}
+  }
+  turn=turn==='red'?'black':'red';
+  const possible=getAllMoves(turn);
+  if(!possible.length){gameOver=true;document.getElementById('status').textContent=`Победили ${turn==='red'?'чёрные':'красные'}!`; }
+  render();
+}
+newGame();
+</script>
+</body>
+</html>
